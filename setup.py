@@ -10,7 +10,7 @@ version = '0.5.1'
 setup(
     name=name,
     version=version,
-    packages=[name,],
+    packages=[name, 'mclbn256'],
     install_requires=[],
     extras_require={
         'docs': [
@@ -37,7 +37,7 @@ setup(
     url='https://github.com/nthparty/lhe',
     author='Wyatt Howe',
     author_email='wyatt@nthparty.com',
-    description='Leveled homomorphic encryption library supporting' + \
+    description='Leveled homomorphic encryption library supporting' +
                 'up to three multiplications and unlimited additions.',
     long_description=long_description,
     long_description_content_type='text/x-rst',
