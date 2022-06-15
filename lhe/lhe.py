@@ -9,17 +9,6 @@ import doctest
 from mclbn256 import Fr, G1, G2, GT
 
 
-def lhe(_: int) -> None:
-    """
-    >>> checks = []
-    >>> for i in range(128):
-    ...    lhe(i)
-    ...    checks.append(True)
-    >>> all(checks)
-    True
-    """
-
-
 class CTG1(NamedTuple):
     """Ciphertext in strictly `G1 x G1` only."""
     g1r: G1
