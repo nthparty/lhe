@@ -36,6 +36,29 @@ The library can be imported in the usual way::
 .. _lhe: https://lhe.readthedocs.io/en/latest/_source/lhe.html#lhe.lhe.lhe
 
 
+The library exports everything needed to perform level-4 homomorphic encryption:
+
+.. code-block:: python
+
+    >>> from lhe import *
+    >>> sk1, pk1 = keygen1()
+    >>> sk2, pk2 = keygen2()
+    >>>
+    >>> ct1 = encrypt1(pk1, 3)
+    >>> ct2 = encrypt2(pk2, 222)
+    >>>
+    >>> ct3 = multiply(ct1, ct2)
+    >>>
+    >>> pt = decryptGT(ct3, sk1, sk2)
+    >>>
+    >>> print("This may take a bit of time for large plaintexts...")
+    This may take a bit of time for large plaintexts...
+    >>> print(pt)
+    666
+
+
+
+
 Development
 -----------
 All installation and development dependencies are managed using `setuptools <https://pypi.org/project/setuptools>`__ and are fully specified in ``setup.py``. The ``extras_require`` parameter is used to `specify optional requirements <https://setuptools.pypa.io/en/latest/userguide/dependency_management.html#optional-dependencies>`__ for various development tasks. This makes it possible to specify additional options (such as ``docs``, ``lint``, and so on) when performing installation using `pip <https://pypi.org/project/pip>`__::
@@ -91,3 +114,4 @@ Remove any old build/distribution files. Then, package the source into a distrib
 Finally, increment the version and upload the package distribution archive to `PyPI <https://pypi.org>`__ using the `twine <https://pypi.org/project/twine>`__ package::
 
     python -m twine upload dist/*
+
