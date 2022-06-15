@@ -1,6 +1,5 @@
 """This library exports everything needed to perform level-4 homomorphic encryption."""
 from lhe.lhe import \
-	lhe,            \
 	keygen1,        \
 	keygen2,        \
 	encrypt1,       \
