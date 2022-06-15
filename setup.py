@@ -5,7 +5,7 @@ with open('README.rst', 'r') as fh:
 
 # The lines below can be parsed by ``docs/conf.py``.
 name = 'lhe'
-version = '0.5.1'
+version = '0.6.0'
 
 setup(
     name=name,
