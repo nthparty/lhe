@@ -30,7 +30,7 @@ This library is available as a `package on PyPI <https://pypi.org/project/lhe>`_
 
 The library can be imported in the usual way::
 
-    from lhe import lhe
+    from lhe import *
 
 .. |lhe| replace:: ``lhe``
 .. _lhe: https://lhe.readthedocs.io/en/latest/_source/lhe.html#lhe.lhe.lhe
