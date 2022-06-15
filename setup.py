@@ -10,8 +10,8 @@ version = '0.5.1'
 setup(
     name=name,
     version=version,
-    packages=[name, 'mclbn256'],
-    install_requires=[],
+    packages=[name],
+    install_requires=['mclbn256'],
     extras_require={
         'docs': [
             'sphinx~=4.2.0',
