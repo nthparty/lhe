@@ -14,11 +14,17 @@ class CTG1(NamedTuple):
     g1r: G1
     g1m_pr: G1
 
+    def __add__(self, other):
+        return add_G1(self, other)
+
 
 class CTG2(NamedTuple):
     """Ciphertext in strictly `G2 x G2` only."""
     g2r: G2
     g2m_pr: G2
+
+    def __add__(self, other):
+        return add_G2(self, other)
 
 
 class CTGT(NamedTuple):
@@ -34,10 +40,19 @@ class CT1(NamedTuple):
     ctg1: CTG1
     ctg2: CTG2
 
+    def __add__(self, other):
+        return CT1(
+            add_G1(self.ctg1, other.ctg1),
+            add_G2(self.ctg2, other.ctg2)
+        )
+
 
 class CT2(NamedTuple):
     """Level-2 ciphertext (wrapper around GT^4)."""
     ctgt: CTGT
+
+    def __add__(self, other):
+        return add_GT(self, other)
 
 
 class KPG1(NamedTuple):
