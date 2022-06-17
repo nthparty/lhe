@@ -21,10 +21,23 @@ class CTG2(NamedTuple):
     g2m_pr: G2
 
 
+class CTGT(NamedTuple):
+    """Level-2 ciphertext in $\textsf{GT}^{4}$."""
+    z_r1_r2: GT
+    z_r1_r2_m_s1: GT
+    z_r1_r2_m_s2: GT
+    z_r1_r2_mm_s1_s2: GT
+
+
 class CT1(NamedTuple):
     """All-purpose (dual) level-1 ciphertext making use of both G1 and G2."""
     ctg1: CTG1
     ctg2: CTG2
+
+
+class CT2(NamedTuple):
+    """Level-2 ciphertext (wrapper around GT^4)."""
+    ctgt: CTGT
 
 
 class KPG1(NamedTuple):
@@ -58,14 +71,6 @@ class PK_with_precomp(NamedTuple):
     z2: GT# = g1 @ p2
     z3: GT# = p1 @ g2
     z4: GT# = p1 @ p2
-
-
-class CTGT(NamedTuple):
-    """Level-2 ciphertext in $\textsf{GT}^{4}$."""
-    z_r1_r2: GT
-    z_r1_r2_m_s1: GT
-    z_r1_r2_m_s2: GT
-    z_r1_r2_mm_s1_s2: GT
 
 
 g1 = G1().hash("Fixed public point in Group 1")
@@ -112,15 +117,8 @@ def encrypt_G2(p: G2, m: int) -> CTG2:
     )
 
 
-def encrypt_lvl_1(pk: PK, m: int) -> CT1:
-    """Encrypt a plaintext to be a dual ('dumb') ciphertext."""
-    ct1 = encrypt_G1(pk.p1)
-    ct2 = encrypt_G2(pk.p2)
-    return CT1(ct1, ct2)
-
-
-def encrypt_lvl_2(pk: PK, m: int) -> CT2:
-    """Encrypt a level-2 ciphertext."""
+def encrypt_GT(p1: G1, p2: G2, m: int) -> CTGT:
+    """Encrypt a plaintext to be a GT ciphertext."""
     r = Fr()
     s = Fr()
     t = Fr()
@@ -128,12 +126,25 @@ def encrypt_lvl_2(pk: PK, m: int) -> CT2:
     z2 = g1 @ p2
     z3 = p1 @ g2
     z4 = p1 @ p2
-    return CT2(
+    return CTGT(
         z1 ** (r + s - t),
         z2 ** r,
         z3 ** s,
-        z4 ** t * (z1 ** m)
+        z4 ** t * (z1 ** Fr(m))
     )
+
+
+def encrypt_lvl_1(pk: PK, m: int) -> CT1:
+    """Encrypt a plaintext to be a dual ('dumb') ciphertext."""
+    ct1 = encrypt_G1(pk.p1, m)
+    ct2 = encrypt_G2(pk.p2, m)
+    return CT1(ct1, ct2)
+
+
+def encrypt_lvl_2(pk: PK, m: int) -> CT2:
+    """Encrypt a level-2 ciphertext."""
+    ct = encrypt_GT(pk.p1, pk.p2, m)
+    return CT2(ct)
 
 
 def add_G1(ct1: CTG1, ct2: CTG1) -> CTG1:
@@ -175,24 +186,38 @@ def multiply_G1_G2(ct1: CTG1, ct2: CTG2) -> CTGT:
     )
 
 
-def decryptG1(ct: CTG1, s1: Fr) -> Optional[int]:
-    """Decrypt a G1 ciphertext to a plaintext."""
-    z = (ct.g1r ** s1) * ct.g1m_pr
-    return dlog(g1, z)
+def decrypt_G1(s1: Fr, ct: CTG1) -> Optional[int]:
+    """
+    Decrypt a G1 ciphertext to a plaintext.
+
+    >>> sk, pk = keygen_G1()
+    >>> ct = encrypt_G1(pk, 737)
+    >>> print(decrypt_G1(sk, ct))
+    737
+    """
+    g1m = ct.g1m_pr - (ct.g1r * s1)  # remember, p = g^s
+    return dlog(g1, g1m)
 
 
-def decryptG2(ct: CTG2, s2: Fr) -> Optional[int]:
-    """Decrypt a G2 ciphertext to a plaintext."""
-    z = (ct.g2r ** s2) * ct.g2m_pr
-    return dlog(g2, z)
+def decrypt_G2(s2: Fr, ct: CTG2) -> Optional[int]:
+    """
+    Decrypt a G2 ciphertext to a plaintext.
+
+    >>> sk, pk = keygen_G2()
+    >>> ct = encrypt_G2(pk, 747)
+    >>> int(decrypt_G2(sk, ct))
+    747
+    """
+    g2m = ct.g2m_pr - (ct.g2r * s2)  # remember, p = g^s
+    return dlog(g2, g2m)
 
 
-def decryptGT(ct: CTGT, s1: Fr, s2: Fr):
+def decrypt_GT(s1: Fr, s2: Fr, ct: CTGT):
     """
     Decrypt a level-2 ciphertext.
 
     >>> sk1, pk1 = keygen_G1()
-    >>> sk2, pk2 = keygen_g2()
+    >>> sk2, pk2 = keygen_G2()
 
     >>> ct11 = encrypt_G1(pk1, 1)
     >>> ct12 = encrypt_G1(pk1, 2)
@@ -202,9 +227,9 @@ def decryptGT(ct: CTGT, s1: Fr, s2: Fr):
     >>> ct1 = add_G1(ct11, ct12)
     >>> ct2 = add_G2(ct21, ct22)
 
-    >>> ct3 = multiply_G1_G2(ct1,ct2)
+    >>> ct3 = multiply_G1_G2(ct1, ct2)
 
-    >>> pt = decryptGT(ct3, sk1, sk2)
+    >>> pt = decrypt_GT(sk1, sk2, ct3)
     >>> int(pt)
     666
     """
@@ -214,6 +239,47 @@ def decryptGT(ct: CTGT, s1: Fr, s2: Fr):
         (ct.z_r1_r2_m_s2 ** (-s2)) * \
         ct.z_r1_r2_mm_s1_s2
     return dlog(z1, z)
+
+
+def decrypt(sk: SK, ct: Union[CT1, CT2, G1, G2, GT]):
+    """
+    Type-generic decryption helper
+
+    >>> sk, pk = keygen()
+
+    >>> pt_m = Fr() % (2 ** 12)
+    >>> m = int(pt_m)
+    >>> 0 <= m < 2 ** 12
+    True
+
+    >>> decrypt(sk, encrypt_G1(pk.p1, m)) == pt_m
+    True
+
+    >>> decrypt(sk, encrypt_G2(pk.p2, m)) == pt_m
+    True
+
+    >>> decrypt(sk, encrypt_GT(pk.p1, pk.p2, m)) == pt_m
+    True
+
+    >>> decrypt(sk, encrypt_lvl_1(pk, m)) == pt_m
+    True
+
+    >>> decrypt(sk, encrypt_lvl_2(pk, m)) == pt_m
+    True
+
+    """
+    if type(ct) is CT2:
+        return decrypt_GT(sk.s1, sk.s2, ct.ctgt)
+    if type(ct) is CT1:
+        pt = decrypt_G1(sk.s1, ct.ctg1)
+        return pt or decrypt_G2(sk.s2, ct.ctg2)
+        # `or` in case maybe one of them got corrupted?
+    if type(ct) is CTGT:
+        return decrypt_GT(sk.s1, sk.s2, ct)
+    if type(ct) is CTG1:
+        return decrypt_G1(sk.s1, ct)
+    if type(ct) is CTG2:
+        return decrypt_G2(sk.s2, ct)
 
 
 def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
@@ -251,11 +317,11 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
     True
     """
     try:
-        for exponent in map(Fr, range(pow(2, 12))):
+        for exponent in map(Fr, range(pow(2, 20))):
             if base ** exponent == power:
                 return exponent
     except TypeError:
-        for exponent in map(Fr, range(pow(2, 12))):
+        for exponent in map(Fr, range(pow(2, 20))):
             if base * exponent == power:
                 return exponent
     # raise ValueError("No such exponent.")
@@ -264,7 +330,7 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
 
 if __name__ == '__main__':
     sk1, pk1 = keygen_G1()
-    sk2, pk2 = keygen_g2()
+    sk2, pk2 = keygen_G2()
 
     # ct1 = encrypt_G1(pk1, 5005)
     # ct2 = encrypt_G2(pk2, 111)
@@ -275,12 +341,12 @@ if __name__ == '__main__':
 
     ct4 = add_GT(ct3, ct3)
 
-    pt = decryptGT(ct3, sk1, sk2)
+    pt = decrypt_GT(sk1, sk2, ct3)
 
     print("This may take a bit of time for large plaintexts...")
     print(pt)
 
-    # pt = decryptGT(ct4, sk1, sk2)
+    # pt = decrypt_GT(ct4, sk1, sk2)
 
     # print("This may take a bit of time for large plaintexts...")
     # print(pt)
