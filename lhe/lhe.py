@@ -14,8 +14,11 @@ class CTG1(NamedTuple):
     g1r: G1
     g1m_pr: G1
 
-    def __add__(self, other):
+    def __add__(self: CTG1, other: CTG1) -> CTG1:
         return add_G1(self, other)
+
+    def __mul__(self: CTG1, other: CTG2) -> CTGT:
+        return multiply_G1_G2(self, other)
 
 
 class CTG2(NamedTuple):
@@ -23,8 +26,11 @@ class CTG2(NamedTuple):
     g2r: G2
     g2m_pr: G2
 
-    def __add__(self, other):
+    def __add__(self: CTG2, other: CTG2) -> CTG2:
         return add_G2(self, other)
+
+    def __mul__(self: CTG2, other: CTG1) -> CTGT:
+        return multiply_G1_G2(other, self)
 
 
 class CTGT(NamedTuple):
@@ -34,7 +40,7 @@ class CTGT(NamedTuple):
     z_m1_s1_r1__r2: GT
     z_m1_s1_r1__m2_s2_r2: GT
 
-    def __add__(self, other):
+    def __add__(self: CTGT, other: CTGT) -> CTGT:
         return add_GT(self, other)
 
 
@@ -43,7 +49,7 @@ class CT1(NamedTuple):
     ctg1: CTG1
     ctg2: CTG2
 
-    def __add__(self, other):
+    def __add__(self: CT1, other: CT1) -> CT1:
         return CT1(
             self.ctg1 + other.ctg1,
             self.ctg2 + other.ctg2
@@ -54,7 +60,7 @@ class CT2(NamedTuple):
     """Level-2 ciphertext (wrapper around GT^4)."""
     ctgt: CTGT
 
-    def __add__(self, other):
+    def __add__(self: CT2, other: CT2) -> CT2:
         return CT2(self.ctgt + other.ctgt)
 
 
@@ -307,7 +313,7 @@ def decrypt_GT(s1: Fr, s2: Fr, ct: CTGT):
     return dlog(z1, z1_m1_m2)
 
 
-def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]):
+def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]) -> Fr:
     """
     Type-generic decryption helper
 
