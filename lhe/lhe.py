@@ -43,6 +43,9 @@ class CTGT(NamedTuple):
     def __add__(self: CTGT, other: CTGT) -> CTGT:
         return add_GT(self, other)
 
+    # def __mul__(self: CTG1, other: Fr):
+    #     return multiply_constant_GT_Fr(self, other)
+
 
 class CT1(NamedTuple):
     """All-purpose (dual) level-1 ciphertext making use of both G1 and G2."""
@@ -54,6 +57,13 @@ class CT1(NamedTuple):
             self.ctg1 + other.ctg1,
             self.ctg2 + other.ctg2
         )
+
+    def __mul__(self: CT1, other: CT1) -> CT2:
+        ct = multiply_G1_G2(other.ctg1, self.ctg2)
+        return CT2(
+            ct or multiply_G1_G2(self.ctg1, other.ctg2)
+        )
+        # `or` just in case first product is corrupted
 
 
 class CT2(NamedTuple):
@@ -273,12 +283,28 @@ def decrypt_GT(s1: Fr, s2: Fr, ct: CTGT):
     >>> ct21 = encrypt_G2(pk2, 200)
     >>> ct22 = encrypt_G2(pk2, 22)
 
-    >>> ct1 = add_G1(ct11, ct12)
-    >>> ct2 = add_G2(ct21, ct22)
+    >>> ct1 = ct11 + ct12
+    >>> ct2 = ct21 + ct22
 
-    >>> ct3 = multiply_G1_G2(ct1, ct2)
+    >>> ct3 = ct1 * ct2
 
     >>> pt = decrypt_GT(sk1, sk2, ct3)
+    >>> int(pt)
+    666
+
+    >>> sk, pk = keygen()
+
+    >>> ct_1 = encrypt_lvl_1(pk, 1)
+    >>> ct_2 = encrypt_lvl_1(pk, 2)
+    >>> ct_200 = encrypt_lvl_1(pk, 200)
+    >>> ct_22 = encrypt_lvl_1(pk, 22)
+
+    >>> ct_3 = ct_1 + ct_2
+    >>> ct_222 = ct_200 + ct_22
+
+    >>> ct_666 = ct_3 * ct_222
+
+    >>> pt = decrypt(sk, ct_666)
     >>> int(pt)
     666
 
