@@ -24,9 +24,9 @@ class CTG2(NamedTuple):
 class CTGT(NamedTuple):
     """Level-2 ciphertext in $\textsf{GT}^{4}$."""
     z_r1_r2: GT
-    z_r1_r2_m_s1: GT
-    z_r1_r2_m_s2: GT
-    z_r1_r2_mm_s1_s2: GT
+    z_m2_s2_r2__r1: GT
+    z_m1_s1_r1__r2: GT
+    z_m1_s1_r1__m2_s2_r2: GT
 
 
 class CT1(NamedTuple):
@@ -62,20 +62,15 @@ class PK(NamedTuple):
     """Dual public key for encryption (either 'dumb' group-agnostic, or optimal)"""
     p1: G1  # public point (in Group 1)
     p2: G2  # public point (in Group 2)
-
-
-class PK_with_precomp(NamedTuple):
-    """Dual public key for encryption (either 'dumb' group-agnostic, or optimal)"""
-    p1: G1  # public point (in Group 1)
-    p2: G2  # public point (in Group 2)
-    z2: GT# = g1 @ p2
-    z3: GT# = p1 @ g2
-    z4: GT# = p1 @ p2
+#   z2: GT# = g1 @ p2
+#   z3: GT# = p1 @ g2
+#   z4: GT# = p1 @ p2
 
 
 g1 = G1().hash("Fixed public point in Group 1")
 g2 = G2().hash("Fixed public point in Group 2")
-z1 = g1 @ g2
+z1 = g1 @ g2  # z a.k.a. z1 is the pairing of the two generators
+#               and is also a generator in its own right, for GT.
 
 
 def keygen_G1() -> Tuple[Fr, G1]:
@@ -118,19 +113,32 @@ def encrypt_G2(p: G2, m: int) -> CTG2:
 
 
 def encrypt_GT(p1: G1, p2: G2, m: int) -> CTGT:
-    """Encrypt a plaintext to be a GT ciphertext."""
-    r = Fr()
-    s = Fr()
-    t = Fr()
-    #1 = g1 @ g2
-    z2 = g1 @ p2
-    z3 = p1 @ g2
-    z4 = p1 @ p2
+    """
+    Encrypt a plaintext to be a GT ciphertext.
+
+    Each such ciphertext is made of the components
+    z1 ** (-t + r + s)
+    z1 ** (r * s2)
+    z1 ** (s * s1)
+    z1 ** (m + (t * s1 * s2))
+    from which (given the secrets, s1 and s2) you can compute
+    z1 ** s and z1 ** r, then subtract from the first to get
+    z1 ** -t which can then yield z1 ** (-t * s1 * s2), the
+    inverse of everything in z1 ** (m + (t * s1 * s2)) except
+    z1 ** m.  m is finally extracted by a d.log. computation.
+    """
+    r = Fr()  # random scalar
+    s = Fr()  # random scalar
+    t = Fr()  # random scalar
+    # z1  = g1 @ g2     # z1 := e(g1, g2); constant/static global/public scalar
+    z1_s2 = g1 @ p2     # e(g1, p2) = e(g1, g2 * s2) = e(g1, g2) ** s2 = z1 ** s2
+    z1_s1 = p1 @ g2     # e(p1, g2) = e(g1 * s1, g2) = e(g1, g2) ** s1 = z1 ** s1
+    z1_s1_s2 = p1 @ p2  # e(p1, p2) = e(g1 * s1, g2 * s2) = e(g1, g2) ** s1 ** s2 = z1 ** s1 ** s2
     return CTGT(
-        z1 ** (r + s - t),
-        z2 ** r,
-        z3 ** s,
-        z4 ** t * (z1 ** Fr(m))
+        z1 ** (r + s - t),             # z1 ** (r + s - t)
+        z1_s2 ** r,                    # z1 ** (r * s2)
+        z1_s1 ** s,                    # z1 ** (s * s1)
+        z1_s1_s2 ** t * (z1 ** Fr(m))  # z1 ** (m + (t * s1 * s2))
     )
 
 
@@ -166,10 +174,10 @@ def add_G2(ct1: CTG2, ct2: CTG2) -> CTG2:
 def add_GT(ct1: CTGT, ct2: CTGT) -> CTGT:
     """Homomorphically add two GT ciphertexts in level 2."""
     return CTGT(
-        ct1.z_r1_r2 + ct2.z_r1_r2,
-        ct1.z_r1_r2_m_s1 + ct2.z_r1_r2_m_s1,
-        ct1.z_r1_r2_m_s2 + ct2.z_r1_r2_m_s2,
-        ct1.z_r1_r2_mm_s1_s2 + ct2.z_r1_r2_mm_s1_s2
+        ct1.z_r1_r2 * ct2.z_r1_r2,  # multiply because the m's we want to add are up in powers of z1
+        ct1.z_m2_s2_r2__r1 * ct2.z_m2_s2_r2__r1,
+        ct1.z_m1_s1_r1__r2 * ct2.z_m1_s1_r1__r2,
+        ct1.z_m1_s1_r1__m2_s2_r2 * ct2.z_m1_s1_r1__m2_s2_r2
     )
 
 
@@ -179,10 +187,27 @@ def multiply_G1_G2(ct1: CTG1, ct2: CTG2) -> CTGT:
     and return a level-2 ciphertext of their product.
     """
     return CTGT(
-        ct1.g1r @ ct2.g2r,
-        ct1.g1r @ ct2.g2m_pr,
-        ct1.g1m_pr @ ct2.g2r,
-        ct1.g1m_pr @ ct2.g2m_pr
+        ct1.g1r @ ct2.g2r,  # z1 ** (r1 * r2)
+        ct1.g1r @ ct2.g2m_pr,  # z1 ** (r1 * (m2 + (r2 * s2))) = z1 ** ((m2 + (s2 * r2)) * r1)
+        ct1.g1m_pr @ ct2.g2r,  # z1 ** ((m1 + (s1 * r1)) * r2)
+        ct1.g1m_pr @ ct2.g2m_pr  # e((g1 * m1) + (p1 * r1), (g2 * m2) + (p2 * r2))
+                                 # = e((g1 * m1) + (g1 * s1 * r1), (g2 * m2) + (g2 * s2 * r2))
+                                 # = e((g1 * m1) + (g1 * (s1 * r1)), (g2 * m2) + (g2 * (s2 * r2)))
+                                 # = e(g1 * (m1 + (s1 * r1))), g2 * (m2 + (s2 * r2)))
+                                 # = e(g1 * (m1 + (s1 * r1))), g2) ** (m2 + (s2 * r2))
+                                 # = e(g1, g2) ** (m1 + (s1 * r1)) ** (m2 + (s2 * r2))
+                                 # = z1 ** ((m1 + (s1 * r1)) * (m2 + (s2 * r2)))
+                                 # = z1 ** (
+                                 #     (m2 * r1 * s1) +
+                                 #     (m1 * r2 * s2) +
+                                 #     (r1 * r2 * s1 * s2) +
+                                 #     (m1 * m2)
+                                 #   )
+                                 # = z1 ** (m2 * r1 * s1)
+                                 # * z1 ** (m1 * r2 * s2)
+                                 # * z1 ** (r1 * r2 * s1 * s2)
+                                 # * z1 ** (m1 * m2)
+        # dec: m1m2 = (r1r2)(s1s2) + r1(m2+s2r2)(-s1) + r2(m1+s1r1)(-s2) + (m1+s1r1)(m2+s2r2)
     )
 
 
@@ -232,16 +257,39 @@ def decrypt_GT(s1: Fr, s2: Fr, ct: CTGT):
     >>> pt = decrypt_GT(sk1, sk2, ct3)
     >>> int(pt)
     666
+
+    The goal is to unmask the last ciphertext component and get z1 ** (m1 * m2).
+
+    Note that that component,
+    z1 ** ((m1 + (s1 * r1)) * (m2 + (s2 * r2))),
+    expands to equal
+     = z1 ** (m2 * r1 * s1)
+     * z1 ** (m1 * r2 * s2)
+     * z1 ** (r1 * r2 * s1 * s2)
+     * z1 ** (m1 * m2)
+     for whose terms we already have the ingredients to construct.
+
+    The z1 ** (r1 * r2 * s1 * s2) specifically cancels the last negative term
+    in the ct.z_m2_s2_r2__r1 by ct.z_m1_s1_r1__r2 product.
+
+    We have z1 to the power of,
+    (m2 + r1 s1)(m1 + r2 s2) = (m1 m2) + (m1 r1 s1) + (m2 r2 s2) + (r1 r2 s1 s2).
+
+    And z1 to the power of,
+    (r1 r2)(s1 s2) + r1 (m1 + r2 s2)(-s1) + r2 (m2 + r1 s1)(-s2) = -(m1 r1 s1) + -(m2 r2 s2) + -(r1 r2 s2 s1).
+
+    Thus, we may decrypt by add these exponents (by multiplying powers) to get m1*m2
+    which can be extracted by a discrete log.
     """
-    z = \
+    z1_m1_m2 = \
         (ct.z_r1_r2 ** (s1 * s2)) * \
-        (ct.z_r1_r2_m_s1 ** (-s1)) * \
-        (ct.z_r1_r2_m_s2 ** (-s2)) * \
-        ct.z_r1_r2_mm_s1_s2
-    return dlog(z1, z)
+        (ct.z_m2_s2_r2__r1 ** (-s1)) * \
+        (ct.z_m1_s1_r1__r2 ** (-s2)) * \
+        ct.z_m1_s1_r1__m2_s2_r2
+    return dlog(z1, z1_m1_m2)
 
 
-def decrypt(sk: SK, ct: Union[CT1, CT2, G1, G2, GT]):
+def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]):
     """
     Type-generic decryption helper
 
@@ -290,7 +338,7 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
     tests 16-bit exponents of each type (for efficiency).
 
     This helper may be replaced with Pollard's Kangaroo method for
-    a big boost in performance.  That optimization is to be implemented.
+    a big boost (~2x) in performance.  That optimization is unimplemented.
     Alternatively, we may use a lookup table.
 
     >>> x = Fr()
@@ -328,7 +376,7 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
     return None
 
 
-if __name__ == '__main__':
+def main():
     sk1, pk1 = keygen_G1()
     sk2, pk2 = keygen_G2()
 
@@ -346,10 +394,13 @@ if __name__ == '__main__':
     print("This may take a bit of time for large plaintexts...")
     print(pt)
 
-    # pt = decrypt_GT(ct4, sk1, sk2)
+    pt = decrypt_GT(sk1, sk2, ct4)
 
-    # print("This may take a bit of time for large plaintexts...")
-    # print(pt)
+    print("This may take a bit of time for large plaintexts...")
+    print(pt)
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     doctest.testmod()  # pragma: no cover
