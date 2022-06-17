@@ -34,6 +34,9 @@ class CTGT(NamedTuple):
     z_m1_s1_r1__r2: GT
     z_m1_s1_r1__m2_s2_r2: GT
 
+    def __add__(self, other):
+        return add_GT(self, other)
+
 
 class CT1(NamedTuple):
     """All-purpose (dual) level-1 ciphertext making use of both G1 and G2."""
@@ -42,8 +45,8 @@ class CT1(NamedTuple):
 
     def __add__(self, other):
         return CT1(
-            add_G1(self.ctg1, other.ctg1),
-            add_G2(self.ctg2, other.ctg2)
+            self.ctg1 + other.ctg1,
+            self.ctg2 + other.ctg2
         )
 
 
@@ -52,7 +55,7 @@ class CT2(NamedTuple):
     ctgt: CTGT
 
     def __add__(self, other):
-        return add_GT(self, other)
+        return CT2(self.ctgt + other.ctgt)
 
 
 class KPG1(NamedTuple):
