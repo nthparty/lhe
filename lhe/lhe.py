@@ -449,8 +449,11 @@ def main():
     print("This may take a bit of time for large plaintexts...")
     print(pt)
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
 
 if __name__ == "__main__":
     doctest.testmod()  # pragma: no cover
+
+# alias for 'dumb' API
+encrypt = encrypt_lvl_1

@@ -3,4 +3,5 @@ from lhe.lhe import \
 	keygen,         \
 	encrypt,        \
 	decrypt
-import lhe as advanced
+import lhe.lhe as advanced
+del lhe
