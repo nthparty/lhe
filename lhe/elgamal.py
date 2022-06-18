@@ -6,6 +6,7 @@ to three multiplications and unlimited additions.
 from __future__ import annotations
 from typing import NamedTuple, Union, Optional, Tuple
 import doctest
+import pickle
 from mclbn256 import Fr, G1, G2, GT
 
 
@@ -19,6 +20,9 @@ class CTG1(NamedTuple):
 
     def __mul__(self: CTG1, other: CTG2) -> CTGT:
         return multiply_G1_G2(self, other)
+
+    # def __bytes__(self):
+    #     return self.g1r.serialize() + self.g1m_pr.serialize()
 
 
 class CTG2(NamedTuple):
@@ -63,7 +67,16 @@ class CT1(NamedTuple):
         return CT2(
             ct or multiply_G1_G2(self.ctg1, other.ctg2)
         )
-        # `or` just in case first product is corrupted
+        #  `or`  just in case the first product is corrupted
+
+    def __bytes__(self: CT1) -> bytes:
+        # I will call level_up here when I go to support circuit privacy
+        return pickle.dumps(self)
+
+    @classmethod
+    def from_bytes(cls, bs: bytes) -> CT1:
+        # Delete this whole method when I go to support circuit privacy
+        return pickle.loads(bs)
 
 
 class CT2(NamedTuple):
@@ -72,6 +85,13 @@ class CT2(NamedTuple):
 
     def __add__(self: CT2, other: CT2) -> CT2:
         return CT2(self.ctgt + other.ctgt)
+
+    def __bytes__(self: CT2) -> bytes:
+        return pickle.dumps(self)
+
+    @classmethod
+    def from_bytes(cls, bs: bytes) -> CT2:
+        return pickle.loads(bs)
 
 
 class KPG1(NamedTuple):
@@ -243,6 +263,62 @@ def multiply_G1_G2(ct1: CTG1, ct2: CTG2) -> CTGT:
                                  # * z1 ** (m1 * m2)
         # dec: m1m2 = (r1r2)(s1s2) + r1(m2+s2r2)(-s1) + r2(m1+s1r1)(-s2) + (m1+s1r1)(m2+s2r2)
     )
+
+
+def level_up_G1(p2: G2, ct: CTG1) -> CTGT:
+    """
+    See `level_up()` for usage details and purpose.
+
+    >>> sk, pk = keygen()
+    >>> m = 1234
+    >>> ct1 = encrypt_G1(pk.p1, m)
+    >>> ct2 = encrypt_GT(pk.p1, pk.p2, m)
+    >>> decrypt(sk, ct1) == decrypt(sk, ct2)
+    True
+    >>> decrypt(sk, level_up_G1(pk.p2, ct1)) == decrypt(sk, ct2)
+    True
+    """
+    return multiply_G1_G2(ct, encrypt_G2(p2, 1))
+
+
+def level_up_G2(p1: G1, ct: CTG2) -> CTGT:
+    """
+    See `level_up()` for usage details and purpose.
+
+    >>> sk, pk = keygen()
+    >>> m = 1234
+    >>> ct1 = encrypt_G2(pk.p2, m)
+    >>> ct2 = encrypt_GT(pk.p1, pk.p2, m)
+    >>> decrypt(sk, ct1) == decrypt(sk, ct2)
+    True
+    >>> decrypt(sk, level_up_G2(pk.p1, ct1)) == decrypt(sk, ct2)
+    True
+    """
+    return multiply_G1_G2(encrypt_G1(p1, 1), ct)
+
+
+def level_up(pk: PK, ct: CT1) -> CT2:
+    """
+    Homomorphically multiply a level-1 ciphertext by the
+    multiplicative identity to produce an equal-valued
+    ciphertext in level-2.  This is used at the end of the
+    homomorphic evaluation to hide whether a ciphertext is
+    a product of a multiplication or not (circuit privacy).
+
+    >>> sk, pk = keygen()
+    >>> m = 1234
+    >>> ct1 = encrypt_lvl_1(pk, m)
+    >>> ct2 = encrypt_lvl_2(pk, m)
+    >>> decrypt(sk, ct1) == decrypt(sk, ct2)
+    True
+    >>> decrypt(sk, level_up(pk, ct1)) == decrypt(sk, ct2)
+    True
+    """
+    ctgt = level_up_G1(pk.p2, ct.ctg1)
+    return CT2(
+        ctgt or level_up_G2(pk.p1, ct.ctg2)
+    )
+    #  `or`  just in case leveling-up the G1 ciphertext is somehow fails
 
 
 def decrypt_G1(s1: Fr, ct: CTG1) -> Optional[int]:
