@@ -6,7 +6,9 @@ to three multiplications and unlimited additions.
 from __future__ import annotations
 from typing import NamedTuple, Union, Optional, Tuple
 import doctest
-import lhe.elgamal as elgamal
+import pickle
+from lhe import elgamal
+
 
 class CTI(NamedTuple):
     """Any-level ciphertext."""
