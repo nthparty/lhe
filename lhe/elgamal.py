@@ -461,7 +461,7 @@ def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]) -> Fr:
         return decrypt_G2(sk.s2, ct)
 
 
-def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
+def dlog(base: Union[Fr, G1, G2, GT], power: GT, unsigned=False) -> Optional[Fr]:
     """
     Discrete logarithm on any group, either Fr, G1, G2, or GT.
 
@@ -495,12 +495,16 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
     >>> dlog(x, y) == a
     True
     """
+    domain = range(pow(2, 20)) if unsigned else \
+        [e for i in range(pow(2, 4)) for e in (i, -i)]
+        # [e for pos, neg in [(i, -i) for i in range(pow(2, 4))] for e in (pos, neg)]
+        # [e for pos, neg in zip(range(pow(2, 4)), range(0, -pow(2, 4), -1)) for e in (pos, neg)]
     try:
-        for exponent in map(Fr, range(pow(2, 20))):
+        for exponent in map(Fr, domain):
             if base ** exponent == power:
                 return exponent
     except TypeError:
-        for exponent in map(Fr, range(pow(2, 20))):
+        for exponent in map(Fr, domain):
             if base * exponent == power:
                 return exponent
     # raise ValueError("No such exponent.")
