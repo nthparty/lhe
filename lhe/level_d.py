@@ -7,34 +7,47 @@ from __future__ import annotations
 from typing import NamedTuple, Union, Optional, Tuple
 import doctest
 import pickle
-from lhe import elgamal
+import secrets
+import elgamal
+
+SK = elgamal.SK
+PK = elgamal.PK
 
 
 class CTI(NamedTuple):
     """Any-level ciphertext."""
     lvl: int
-    inner: CTI
+    inner: Union[CTI, elgamal.CT1, elgamal.CT2]
     extension: int
 
 
+d = 2
+n = 2**10
+rand_pt = lambda: secrets.randbelow(n)
+
+
 def keygen() -> Tuple[SK, PK]:
-    """Generate a dual keypair."""
-    s1, p1 = keygen_G1()
-    s2, p2 = keygen_G2()
-    return SK(s1, s2), PK(p1, p2)
+    """Generate a new keypair."""
+    return elgamal.keygen()
 
 
-def encrypt_lvl_1(pk: PK, m: int) -> CT1:
-    """Encrypt a plaintext to be a dual ('dumb') ciphertext."""
-    ct1 = encrypt_G1(pk.p1, m)
-    ct2 = encrypt_G2(pk.p2, m)
-    return CT1(ct1, ct2)
+def encrypt_lvl(pk: PK, lvl: int, m: int) -> CTI:
+    """Encrypt a ciphertext for the given level."""
+    b = rand_pt()
+    return CTI(
+        lvl,
+        elgamal.encrypt_lvl(pk, d, b),
+        (m - b) % n
+    )
 
 
-def encrypt_lvl_2(pk: PK, m: int) -> CT2:
-    """Encrypt a level-2 ciphertext."""
-    ct = encrypt_GT(pk.p1, pk.p2, m)
-    return CT2(ct)
+
+    # ct = encrypt_lvl_1(pk.p1, pk.p2, m)
+    # return CTI(
+    #     lvl,
+    #     ct,
+    #
+    # )
 
 
 def add_G1(ct1: CTG1, ct2: CTG1) -> CTG1:
