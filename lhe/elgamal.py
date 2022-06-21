@@ -208,6 +208,11 @@ def encrypt_lvl_2(pk: PK, m: int) -> CT2:
     ct = encrypt_GT(pk.p1, pk.p2, m)
     return CT2(ct)
 
+def encrypt_lvl(pk: PK, lvl: int, m: int) -> Union[CT1, CT2]:
+    """Encrypt a level-1 or -2 ciphertext."""
+    assert(lvl == 1 or lvl == 2)
+    return encrypt_lvl_1(pk, m) if lvl == 1 else encrypt_lvl_2(pk, m)
+
 
 def add_G1(ct1: CTG1, ct2: CTG1) -> CTG1:
     """Homomorphically add two G1 ciphertexts in level 1."""
