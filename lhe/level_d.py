@@ -17,13 +17,45 @@ PK = elgamal.PK
 class CTI(NamedTuple):
     """Any-level ciphertext."""
     lvl: int
-    inner: Union[CTI, elgamal.CT1, elgamal.CT2]
-    extension: int
+    masked: int
+    enc_mask: Union[CTI, elgamal.CT1, elgamal.CT2]
+
+    def __add__(self, other):
+        assert(self.lvl == other.lvl)
+
+        if self.lvl <= d:
+            return CTI(
+                self.lvl,
+                (self.masked + self.masked) % pt_mod,
+                self.enc_mask + other.enc_mask,
+            )
+
+        elif self.lvl <= 2*d:
+            return CTI(
+                self.lvl,
+                (self.masked + self.masked) % pt_mod,
+                self.enc_mask + other.enc_mask,
+            )
+
+    def __mul__(self, other):
+        if self.lvl <= d and other.lvl <= d:
+            return CTI(
+                self.lvl,
+                (self.masked * self.masked) % pt_mod,
+                self.enc_mask + other.enc_mask,
+            )
+
+        elif self.lvl <= 2*d and other.lvl <= 2*d:
+            return CTI(
+                self.lvl,
+                (self.masked + self.masked) % pt_mod,
+                self.enc_mask + other.enc_mask,
+            )
 
 
 d = 2
-n = 2**10
-rand_pt = lambda: secrets.randbelow(n)
+pt_mod = 2 ** 10
+rand_pt = lambda: secrets.randbelow(pt_mod)
 
 
 def keygen() -> Tuple[SK, PK]:
@@ -33,21 +65,15 @@ def keygen() -> Tuple[SK, PK]:
 
 def encrypt_lvl(pk: PK, lvl: int, m: int) -> CTI:
     """Encrypt a ciphertext for the given level."""
-    b = rand_pt()
-    return CTI(
-        lvl,
-        elgamal.encrypt_lvl(pk, d, b),
-        (m - b) % n
-    )
-
-
-
-    # ct = encrypt_lvl_1(pk.p1, pk.p2, m)
-    # return CTI(
-    #     lvl,
-    #     ct,
-    #
-    # )
+    if lvl <= d:
+        b = rand_pt()
+        return CTI(
+            lvl,
+            (m - b) % pt_mod,
+            elgamal.encrypt_lvl(pk, d, b)
+        )
+    else:
+        assert lvl <= d and "Not implemented yet."
 
 
 def add_G1(ct1: CTG1, ct2: CTG1) -> CTG1:
