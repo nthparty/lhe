@@ -56,7 +56,7 @@ The library exports everything needed to perform level-4 homomorphic encryption:
     >>> print(pt)
     666
 
-
+Except for a very specific set of configurations, the encryption scheme in this library **is not competitive** with other leveled homomorphic encryption schemes.  (That said, more theoretically practical schemes may not yet have practical implementations supporting languages such as Python and WebAssembly.)  This all depends on an applications need for higher-depth/level circuit evaluation, circuit privacy (not yet implemented, but straightforward) vs symmetric encryption, and ciphertext compactness.  The goal is to support the possibility of all configurations, regardless of immediate practicality, and let the engineer decide what suits their use case best.
 
 
 Development
