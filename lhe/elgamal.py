@@ -78,6 +78,9 @@ class CT1(NamedTuple):
         # Delete this whole method when I go to support circuit privacy
         return pickle.loads(bs)
 
+    def decrypt(self, sk: SK) -> int:
+        return decrypt(sk, self).__int__()
+
 
 class CT2(NamedTuple):
     """Level-2 ciphertext (wrapper around GT^4)."""
@@ -92,6 +95,9 @@ class CT2(NamedTuple):
     @classmethod
     def from_bytes(cls, bs: bytes) -> CT2:
         return pickle.loads(bs)
+
+    def decrypt(self, sk: SK) -> int:
+        return decrypt(sk, self).__int__()
 
 
 class KPG1(NamedTuple):
@@ -496,7 +502,7 @@ def dlog(base: Union[Fr, G1, G2, GT], power: GT, unsigned=False) -> Optional[Fr]
     True
     """
     domain = range(pow(2, 20)) if unsigned else \
-        [e for i in range(pow(2, 4)) for e in (i, -i)]
+        [e for i in range(pow(2, 20)) for e in (i, -i)]
         # [e for pos, neg in [(i, -i) for i in range(pow(2, 4))] for e in (pos, neg)]
         # [e for pos, neg in zip(range(pow(2, 4)), range(0, -pow(2, 4), -1)) for e in (pos, neg)]
     try:
@@ -540,5 +546,5 @@ def main():
 if __name__ == "__main__":
     doctest.testmod()  # pragma: no cover
 
-# alias for 'dumb' API
+# Alias for 'dumb' API
 encrypt = encrypt_lvl_1

@@ -4,53 +4,106 @@ Python homomorphic encryption library supporting up
 to three multiplications and unlimited additions.
 """
 from __future__ import annotations
-from typing import NamedTuple, Union, Optional, Tuple
+
+import warnings
+from typing import NamedTuple, Union, Optional, Tuple, List
 import doctest
 import pickle
 import secrets
-import elgamal
+from lhe import elgamal
 
 SK = elgamal.SK
 PK = elgamal.PK
 
-
-class CTI(NamedTuple):
-    """Any-level ciphertext."""
+_pk: PK = PK(None, None)
+class CTD(NamedTuple):
+    """An at-most-level-d ciphertext."""
     lvl: int
     masked: int
-    enc_mask: Union[CTI, elgamal.CT1, elgamal.CT2]
+    enc_mask: Union[CTD, elgamal.CT1]#, elgamal.CT2]
 
-    def __add__(self, other):
-        assert(self.lvl == other.lvl)
+    def __radd__(self, other: Union[CTD, int]) -> CTD:
+        if type(other) == int:
+            if other == 0:
+                return self
+            return self + encrypt_for_d(_pk, self.lvl, other)
+
+    def __add__(self, other: Union[CTD, int]) -> CTD:
+        if type(other) == int:
+            if other == 0:
+                return self
+            return self + encrypt_for_d(_pk, self.lvl, other)
+
+        assert(self.lvl == other.lvl)  # Could maybe raise (inefficiently) the lower one if differs.
 
         if self.lvl <= d:
-            return CTI(
+            return CTD(
                 self.lvl,
                 (self.masked + self.masked) % pt_mod,
                 self.enc_mask + other.enc_mask,
             )
+        warnings.warn("Returned None")
 
-        elif self.lvl <= 2*d:
-            return CTI(
-                self.lvl,
-                (self.masked + self.masked) % pt_mod,
-                self.enc_mask + other.enc_mask,
-            )
+    def __mul__(self, other: Union[CTD, int]) -> Union[CTD, CT2D]:
+        if type(other) == int:
+            return sum([self] * other)  # This could be improved by an add-and-double-style product.
 
-    def __mul__(self, other):
-        if self.lvl <= d and other.lvl <= d:
-            return CTI(
-                self.lvl,
+        assert self.lvl <= d and other.lvl <= d
+
+        if self.lvl + other.lvl <= d:
+            return CTD(
+                self.lvl + other.lvl,
                 (self.masked * self.masked) % pt_mod,
-                self.enc_mask + other.enc_mask,
+                self.enc_mask * other.enc_mask +
+                other.enc_mask * self.masked +
+                self.enc_mask * other.masked
             )
 
-        elif self.lvl <= 2*d and other.lvl <= 2*d:
-            return CTI(
-                self.lvl,
-                (self.masked + self.masked) % pt_mod,
-                self.enc_mask + other.enc_mask,
+        if self.lvl + other.lvl <= 2*d:
+            return CT2D(
+                self.lvl + other.lvl,
+                # encrypt_for_d(_pk, self.lvl + other.lvl, self.masked * other.masked) +
+                # encrypt_for_d(_pk, 2*d, self.masked * other.masked) +
+                # encrypt_for_d(_pk, d, self.masked * other.masked) +
+                encrypt_for_d(_pk, other.enc_mask.lvl, self.masked * other.masked) +
+                other.enc_mask * self.masked +
+                self.enc_mask * other.masked,
+                [(self.enc_mask, other.enc_mask)]
             )
+        warnings.warn("Returned None")
+
+    def decrypt(self, sk: SK) -> int:
+        return self.masked + self.enc_mask.decrypt(sk)
+
+
+class CT2D(NamedTuple):
+    """An at-most-level-2d ciphertext."""
+    lvl: int
+    enc_mask: Union[CTD, elgamal.CT1]
+    enc_masks: List[Tuple[Union[CTD, elgamal.CT1], Union[CTD, elgamal.CT1]]]
+
+    def __add__(self, other) -> CT2D:
+        assert(self.lvl == other.lvl)  # Could maybe raise (inefficiently) the lower one if differs.
+
+        if d < self.lvl <= 2*d:
+            return CT2D(
+                self.lvl,
+                self.enc_mask + other.enc_mask,   # homomorphic addition
+                self.enc_masks + other.enc_masks  # list concatenation
+            )
+        warnings.warn("Returned None")
+
+    def __mul__(self, other: Union[CT2D, int]) -> CT2D:
+        if type(other) == int:
+            return sum([self] * other)  # This could be improved by an add-and-double-style product.
+        warnings.warn("Returned None")
+
+    def decrypt(self, sk: SK) -> int:
+        return self.enc_mask.decrypt(sk) + sum(
+            a.decrypt(sk) * b.decrypt(sk)
+            for a, b in self.enc_masks
+        )
+        warnings.warn("Returned None")
 
 
 d = 2
@@ -63,274 +116,87 @@ def keygen() -> Tuple[SK, PK]:
     return elgamal.keygen()
 
 
-def encrypt_lvl(pk: PK, lvl: int, m: int) -> CTI:
+def encrypt_for_d(pk: PK, _d: int, m: int) -> Union[elgamal.CT1, CTD, CT2D]:
     """Encrypt a ciphertext for the given level."""
-    if lvl <= d:
-        b = rand_pt()
-        return CTI(
-            lvl,
-            (m - b) % pt_mod,
-            elgamal.encrypt_lvl(pk, d, b)
-        )
+    global _pk, d
+    _pk = pk  # TODO: FIX
+    d = max(_d, d)
+    if _d == 1:
+        return elgamal.encrypt_lvl(pk, 1, m)
+    # if _d == 2:
+    #     return elgamal.encrypt_for_d(pk, 2, m)
     else:
-        assert lvl <= d and "Not implemented yet."
+        b = rand_pt()
+        return CTD(
+            _d,
+            (m - b) % pt_mod,
+            encrypt_for_d(pk, _d-1, b)
+        )
 
 
-def add_G1(ct1: CTG1, ct2: CTG1) -> CTG1:
-    """Homomorphically add two G1 ciphertexts in level 1."""
-    return CTG1(
-        ct1.g1r + ct2.g1r,
-        ct1.g1m_pr + ct2.g1m_pr
-    )
-
-
-def add_G2(ct1: CTG2, ct2: CTG2) -> CTG2:
-    """Homomorphically add two G2 ciphertexts in level 1."""
-    return CTG2(
-        ct1.g2r + ct2.g2r,
-        ct1.g2m_pr + ct2.g2m_pr
-    )
-
-
-def multiply_G1_G2(ct1: CTG1, ct2: CTG2) -> CTGT:
-    """
-    Homomorphically multiply two complementary level-1 ciphertexts
-    and return a level-2 ciphertext of their product.
-    """
-    return CTGT(
-        ct1.g1r @ ct2.g2r,  # z1 ** (r1 * r2)
-        ct1.g1r @ ct2.g2m_pr,  # z1 ** (r1 * (m2 + (r2 * s2))) = z1 ** ((m2 + (s2 * r2)) * r1)
-        ct1.g1m_pr @ ct2.g2r,  # z1 ** ((m1 + (s1 * r1)) * r2)
-        ct1.g1m_pr @ ct2.g2m_pr  # e((g1 * m1) + (p1 * r1), (g2 * m2) + (p2 * r2))
-                                 # = e((g1 * m1) + (g1 * s1 * r1), (g2 * m2) + (g2 * s2 * r2))
-                                 # = e((g1 * m1) + (g1 * (s1 * r1)), (g2 * m2) + (g2 * (s2 * r2)))
-                                 # = e(g1 * (m1 + (s1 * r1))), g2 * (m2 + (s2 * r2)))
-                                 # = e(g1 * (m1 + (s1 * r1))), g2) ** (m2 + (s2 * r2))
-                                 # = e(g1, g2) ** (m1 + (s1 * r1)) ** (m2 + (s2 * r2))
-                                 # = z1 ** ((m1 + (s1 * r1)) * (m2 + (s2 * r2)))
-                                 # = z1 ** (
-                                 #     (m2 * r1 * s1) +
-                                 #     (m1 * r2 * s2) +
-                                 #     (r1 * r2 * s1 * s2) +
-                                 #     (m1 * m2)
-                                 #   )
-                                 # = z1 ** (m2 * r1 * s1)
-                                 # * z1 ** (m1 * r2 * s2)
-                                 # * z1 ** (r1 * r2 * s1 * s2)
-                                 # * z1 ** (m1 * m2)
-        # dec: m1m2 = (r1r2)(s1s2) + r1(m2+s2r2)(-s1) + r2(m1+s1r1)(-s2) + (m1+s1r1)(m2+s2r2)
-    )
-
-
-def decrypt_G1(s1: Fr, ct: CTG1) -> Optional[int]:
-    """
-    Decrypt a G1 ciphertext to a plaintext.
-
-    >>> sk, pk = keygen_G1()
-    >>> ct = encrypt_G1(pk, 737)
-    >>> print(decrypt_G1(sk, ct))
-    737
-    """
-    g1m = ct.g1m_pr - (ct.g1r * s1)  # remember, p = g^s
-    return dlog(g1, g1m)
-
-
-def decrypt_G2(s2: Fr, ct: CTG2) -> Optional[int]:
-    """
-    Decrypt a G2 ciphertext to a plaintext.
-
-    >>> sk, pk = keygen_G2()
-    >>> ct = encrypt_G2(pk, 747)
-    >>> int(decrypt_G2(sk, ct))
-    747
-    """
-    g2m = ct.g2m_pr - (ct.g2r * s2)  # remember, p = g^s
-    return dlog(g2, g2m)
-
-
-def decrypt_GT(s1: Fr, s2: Fr, ct: CTGT):
-    """
-    Decrypt a level-2 ciphertext.
-
-    >>> sk1, pk1 = keygen_G1()
-    >>> sk2, pk2 = keygen_G2()
-
-    >>> ct11 = encrypt_G1(pk1, 1)
-    >>> ct12 = encrypt_G1(pk1, 2)
-    >>> ct21 = encrypt_G2(pk2, 200)
-    >>> ct22 = encrypt_G2(pk2, 22)
-
-    >>> ct1 = ct11 + ct12
-    >>> ct2 = ct21 + ct22
-
-    >>> ct3 = ct1 * ct2
-
-    >>> pt = decrypt_GT(sk1, sk2, ct3)
-    >>> int(pt)
-    666
-
-    >>> sk, pk = keygen()
-
-    >>> ct_1 = encrypt_lvl_1(pk, 1)
-    >>> ct_2 = encrypt_lvl_1(pk, 2)
-    >>> ct_200 = encrypt_lvl_1(pk, 200)
-    >>> ct_22 = encrypt_lvl_1(pk, 22)
-
-    >>> ct_3 = ct_1 + ct_2
-    >>> ct_222 = ct_200 + ct_22
-
-    >>> ct_666 = ct_3 * ct_222
-
-    >>> pt = decrypt(sk, ct_666)
-    >>> int(pt)
-    666
-
-    The goal is to unmask the last ciphertext component and get z1 ** (m1 * m2).
-
-    Note that that component,
-    z1 ** ((m1 + (s1 * r1)) * (m2 + (s2 * r2))),
-    expands to equal
-     = z1 ** (m2 * r1 * s1)
-     * z1 ** (m1 * r2 * s2)
-     * z1 ** (r1 * r2 * s1 * s2)
-     * z1 ** (m1 * m2)
-     for whose terms we already have the ingredients to construct.
-
-    The z1 ** (r1 * r2 * s1 * s2) specifically cancels the last negative term
-    in the ct.z_m2_s2_r2__r1 by ct.z_m1_s1_r1__r2 product.
-
-    We have z1 to the power of,
-    (m2 + r1 s1)(m1 + r2 s2) = (m1 m2) + (m1 r1 s1) + (m2 r2 s2) + (r1 r2 s1 s2).
-
-    And z1 to the power of,
-    (r1 r2)(s1 s2) + r1 (m1 + r2 s2)(-s1) + r2 (m2 + r1 s1)(-s2) = -(m1 r1 s1) + -(m2 r2 s2) + -(r1 r2 s2 s1).
-
-    Thus, we may decrypt by add these exponents (by multiplying powers) to get m1*m2
-    which can be extracted by a discrete log.
-    """
-    z1_m1_m2 = \
-        (ct.z_r1_r2 ** (s1 * s2)) * \
-        (ct.z_m2_s2_r2__r1 ** (-s1)) * \
-        (ct.z_m1_s1_r1__r2 ** (-s2)) * \
-        ct.z_m1_s1_r1__m2_s2_r2
-    return dlog(z1, z1_m1_m2)
-
-
-def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]) -> Fr:
-    """
-    Type-generic decryption helper
-
-    >>> sk, pk = keygen()
-
-    >>> pt_m = Fr() % (2 ** 12)
-    >>> m = int(pt_m)
-    >>> 0 <= m < 2 ** 12
-    True
-
-    >>> decrypt(sk, encrypt_G1(pk.p1, m)) == pt_m
-    True
-
-    >>> decrypt(sk, encrypt_G2(pk.p2, m)) == pt_m
-    True
-
-    >>> decrypt(sk, encrypt_GT(pk.p1, pk.p2, m)) == pt_m
-    True
-
-    >>> decrypt(sk, encrypt_lvl_1(pk, m)) == pt_m
-    True
-
-    >>> decrypt(sk, encrypt_lvl_2(pk, m)) == pt_m
-    True
-
-    """
-    if type(ct) is CT2:
-        return decrypt_GT(sk.s1, sk.s2, ct.ctgt)
-    if type(ct) is CT1:
-        pt = decrypt_G1(sk.s1, ct.ctg1)
-        return pt or decrypt_G2(sk.s2, ct.ctg2)
-        # `or` in case maybe one of them got corrupted?
-    if type(ct) is CTGT:
-        return decrypt_GT(sk.s1, sk.s2, ct)
-    if type(ct) is CTG1:
-        return decrypt_G1(sk.s1, ct)
-    if type(ct) is CTG2:
-        return decrypt_G2(sk.s2, ct)
-
-
-def dlog(base: Union[Fr, G1, G2, GT], power: GT) -> Optional[Fr]:
-    """
-    Discrete logarithm on any group, either Fr, G1, G2, or GT.
-
-    Can work with up to 20-bits before giving up.  The example below
-    tests 16-bit exponents of each type (for efficiency).
-
-    This helper may be replaced with Pollard's Kangaroo method for
-    a big boost (~2x) in performance.  That optimization is unimplemented.
-    Alternatively, we may use a lookup table.
-
-    >>> x = Fr()
-    >>> a = Fr() % (2 ** 16)
-    >>> dlog(x, x ** a) == a
-    True
-
-    >>> x = G1().randomize()
-    >>> a = Fr() % (2 ** 16)
-    >>> y = x * a
-    >>> dlog(x, y) == a
-    True
-
-    >>> x = G2().randomize()
-    >>> a = Fr() % (2 ** 16)
-    >>> y = x * a
-    >>> dlog(x, y) == a
-    True
-
-    >>> x = G1().randomize() @ G2().randomize()
-    >>> a = Fr() % (2 ** 16)
-    >>> y = x ** a
-    >>> dlog(x, y) == a
-    True
-    """
-    try:
-        for exponent in map(Fr, range(pow(2, 20))):
-            if base ** exponent == power:
-                return exponent
-    except TypeError:
-        for exponent in map(Fr, range(pow(2, 20))):
-            if base * exponent == power:
-                return exponent
-    # raise ValueError("No such exponent.")
-    return None
+# def encrypt_lvl(pk: PK, lvl: int, m: int) -> Union[elgamal.CT1, CTD, CT2D]:
+#     """Encrypt a ciphertext for the given level."""
+#     _pk = pk  # TODO: FIX
+#     if lvl == 1:
+#         return elgamal.encrypt_lvl(pk, 1, m)
+#     # if lvl == 2:
+#     #     return elgamal.encrypt_lvl(pk, 2, m)
+#     if lvl <= d:
+#         b = rand_pt()
+#         return CTD(
+#             lvl,
+#             (m - b) % pt_mod,
+#             encrypt_lvl(pk, lvl-1, b)
+#         )
+#     else:
+#         assert lvl <= d and "Not implemented yet."
 
 
 def main():
-    sk1, pk1 = keygen_G1()
-    sk2, pk2 = keygen_G2()
+    encrypt = encrypt_for_d  # from lhe.level_d import keygen, encrypt
 
-    # ct1 = encrypt_G1(pk1, 5005)
-    # ct2 = encrypt_G2(pk2, 111)
-    ct1 = encrypt_G1(pk1, 3)
-    ct2 = encrypt_G2(pk2, 222)
+    sk, pk = keygen()
+    ct1 = encrypt(pk, _d=10, m=6)
+    ct2 = encrypt(pk, _d=10, m=3)
 
-    ct3 = multiply_G1_G2(ct1, ct2)
+    print((ct1 + ct2).decrypt(sk))
+    print((ct1 * ct2).decrypt(sk))
+    print(((ct1*2) + ct2).decrypt(sk))
+    print(((ct1*2) * ct2).decrypt(sk))
 
-    ct4 = add_GT(ct3, ct3)
+    global _pk, d
+    print(_pk, d)
 
-    pt = decrypt_GT(sk1, sk2, ct3)
 
-    print("This may take a bit of time for large plaintexts...")
-    print(pt)
 
-    pt = decrypt_GT(sk1, sk2, ct4)
+    # sk1, pk1 = keygen_G1()
+    # sk2, pk2 = keygen_G2()
+    #
+    # # ct1 = encrypt_G1(pk1, 5005)
+    # # ct2 = encrypt_G2(pk2, 111)
+    # ct1 = encrypt_G1(pk1, 3)
+    # ct2 = encrypt_G2(pk2, 222)
+    #
+    # ct3 = multiply_G1_G2(ct1, ct2)
+    #
+    # ct4 = add_GT(ct3, ct3)
+    #
+    # pt = decrypt_GT(sk1, sk2, ct3)
+    #
+    # print("This may take a bit of time for large plaintexts...")
+    # print(pt)
+    #
+    # pt = decrypt_GT(sk1, sk2, ct4)
+    #
+    # print("This may take a bit of time for large plaintexts...")
+    # print(pt)
+    pass
 
-    print("This may take a bit of time for large plaintexts...")
-    print(pt)
-
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     doctest.testmod()  # pragma: no cover
 
-# alias for 'dumb' API
-encrypt = encrypt_lvl_1
+# Alias for 'dumb' API
+encrypt = encrypt_for_d

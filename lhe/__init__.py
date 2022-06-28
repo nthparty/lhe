@@ -11,12 +11,10 @@ def get_exports():
 
     two_level.keygen = elgamal.keygen
     two_level.encrypt = elgamal.encrypt
-    two_level.decrypt = elgamal.decrypt
     two_level.advanced = elgamal
 
     many_level.keygen = level_d.keygen
     many_level.encrypt = level_d.encrypt
-    many_level.decrypt = level_d.decrypt
     many_level.advanced = level_d
 
     return two_level, many_level
