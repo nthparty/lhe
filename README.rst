@@ -40,7 +40,30 @@ The library exports everything needed to perform level-4 homomorphic encryption:
 
 .. code-block:: python
 
-    >>> from lhe import *
+    >>> from lhe import keygen, encrypt, decrypt
+    
+    # A secret key is given to recipient and its corresponding public key is given to contrubutors.
+    >>> sk, pk = keygen()
+    
+    # Contributors encrypt their data using that very same public key they have recieved.
+    >>> ct1 = encrypt(pk, 1)
+    >>> ct2 = encrypt(pk, 2)
+    >>> ct3 = encrypt(pk, 96)
+    >>> ct4 = encrypt(pk, 200)
+    
+    # Compute party operates on those contributed ciphertexts.
+    >>> ct5 = (ct1 + ct2) * (ct3 + ct4)
+    
+    # The recipient of the computation decrypts the resulting ciphertext of the computation. 
+    >>> pt = decrypt(sk, ct5)
+    
+    # Assuming the result is not too large of a number, it is resolved exactly.
+    >>> int(pt)
+    666
+
+.. code-block:: python
+
+    >>> from lhe.advanced import *
     >>> sk1, pk1 = keygen1()
     >>> sk2, pk2 = keygen2()
     >>>
@@ -49,10 +72,11 @@ The library exports everything needed to perform level-4 homomorphic encryption:
     >>>
     >>> ct3 = multiply(ct1, ct2)
     >>>
-    >>> pt = decryptGT(ct3, sk1, sk2)
-    >>>
     >>> print("This may take a bit of time for large plaintexts...")
     This may take a bit of time for large plaintexts...
+    >>>
+    >>> pt = decryptGT(ct3, sk1, sk2)
+    >>>
     >>> print(pt)
     666
 
