@@ -59,7 +59,7 @@ The library exports everything needed to perform level-4 homomorphic encryption:
     
     # Assuming the result is not too large of a number, it is resolved exactly.
     >>> int(pt)
-    666
+    888
 
 .. code-block:: python
 
