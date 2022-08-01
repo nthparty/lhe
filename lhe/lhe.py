@@ -380,7 +380,7 @@ def decrypt(sk: SK, ct: Union[CT1, CT2, CTG1, CTG2, CTGT]) -> Fr:
         return decrypt_G2(sk.s2, ct)
 
 
-def dlog(base: Union[Fr, G1, G2, GT], power: GT, unsigned=True) -> Optional[Fr]:
+def dlog(base: Union[Fr, G1, G2, GT], power: GT, unsigned=False) -> Optional[Fr]:
     """
     Discrete logarithm on any group, either Fr, G1, G2, or GT.
 
