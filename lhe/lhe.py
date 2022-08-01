@@ -45,6 +45,13 @@ class CTGT(NamedTuple):
 
     # def __mul__(self: CTG1, other: Fr):
     #     return multiply_constant_GT_Fr(self, other)
+    def __mul__(self: CTG1, other: Fr):
+        return CTGT(
+            self.z_r1_r2 ** other,
+            self.z_m2_s2_r2__r1 ** other,
+            self.z_m1_s1_r1__r2 ** other,
+            self.z_m1_s1_r1__m2_s2_r2 ** other
+        )
 
 
 class CT1(NamedTuple):
@@ -58,12 +65,53 @@ class CT1(NamedTuple):
             self.ctg2 + other.ctg2
         )
 
-    def __mul__(self: CT1, other: CT1) -> CT2:
-        ct = multiply_G1_G2(other.ctg1, self.ctg2)
-        return CT2(
-            ct or multiply_G1_G2(self.ctg1, other.ctg2)
+    def __mul__(self: CT1, other: Union[CT1, Fr, int]) -> CT1 | CT2:
+        if type(other) == int:
+            other = Fr(other)
+        if type(other) == Fr:
+            return CT1(
+                CTG1(
+                    self.ctg1.g1r * other,
+                    self.ctg1.g1m_pr * other
+                ),
+                CTG2(
+                    self.ctg2.g2r * other,
+                    self.ctg2.g2m_pr * other
+                )
+            )
+        else:
+            ct = multiply_G1_G2(other.ctg1, self.ctg2)
+            return CT2(
+                ct or multiply_G1_G2(self.ctg1, other.ctg2)
+            )
+            # `or` just in case first product is corrupted
+
+    def __rmul__(self: CT1, other: Union[Fr, int]) -> CT1:
+        if type(other) == int:
+            other = Fr(other)
+        if type(other) == Fr:
+            return CT1(
+                CTG1(
+                    self.ctg1.g1r * other,
+                    self.ctg1.g1m_pr * other
+                ),
+                CTG2(
+                    self.ctg2.g2r * other,
+                    self.ctg2.g2m_pr * other
+                )
+            )
+
+    def __neg__(self: CT1) -> CT1:
+        return CT1(
+            CTG1(
+                -self.ctg1.g1r,
+                -self.ctg1.g1m_pr
+            ),
+            CTG2(
+                -self.ctg2.g2r,
+                -self.ctg2.g2m_pr
+            )
         )
-        # `or` just in case first product is corrupted
 
 
 class CT2(NamedTuple):
@@ -72,6 +120,18 @@ class CT2(NamedTuple):
 
     def __add__(self: CT2, other: CT2) -> CT2:
         return CT2(self.ctgt + other.ctgt)
+
+    def __mul__(self: CT2, other: Union[Fr, int]) -> CT2:
+        if type(other) == int:
+            other = Fr(other)
+        if type(other) == Fr:
+            return CT2(
+                self.ctgt * other
+            )
+        raise TypeError("Cannot perform constant multiplication with these operands.")
+
+    def __rmul__(self: CT1, other: Union[Fr, int]) -> CT1:
+        return self.__mul__(other)
 
 
 class KPG1(NamedTuple):
