@@ -455,6 +455,41 @@ def main():
 #     main()
 
 if __name__ == "__main__":
+    encrypt = encrypt_lvl_1
+
+    # A secret key is given to recipient and its corresponding public key is given to contrubutors.
+    sk, pk = keygen()
+
+    # Contributors encrypt their data using that very same public key they have recieved.
+    ct1 = encrypt(pk, 1)
+    ct2 = encrypt(pk, 2)
+    ct3 = encrypt(pk, 96)
+    ct4 = encrypt(pk, 200)
+
+    # Compute party operates on those contributed ciphertexts.
+    ct5 = (ct1 + ct2) * (ct3 + ct4)
+
+    # # The recipient of the computation decrypts the resulting ciphertext of the computation.
+    # pt = decrypt(sk, ct5)
+    #
+    # # Assuming the result is not too large of a number, it is resolved exactly.
+    # print(int(pt))
+
+
+    print(int(decrypt(sk, ct4 * -1)))
+    print(int(decrypt(sk, ct4 * 1)))
+    print(int(decrypt(sk, ct4 * -2)))
+    print(int(decrypt(sk, ct4 * 2)))
+    print(int(decrypt(sk, -3 * ct4)))
+    # print(int(decrypt(sk, ct5)))
+
+
+
+
+
+
+
+
     doctest.testmod()  # pragma: no cover
 
 # alias for 'dumb' API
